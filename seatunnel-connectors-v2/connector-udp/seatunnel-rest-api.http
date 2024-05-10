@@ -1,0 +1,53 @@
+## 文档 https://seatunnel.apache.org/docs/2.3.5/seatunnel-engine/rest-api
+
+### 获取所有任务列表
+GET http://127.0.0.1:5801/hazelcast/rest/maps/running-jobs
+
+### 获取任务详情
+GET http://127.0.0.1:5801/hazelcast/rest/maps/running-job/840582175232360449
+
+### 获取所有结束的任务
+# finished job status. FINISHED,CANCELED,FAILED,UNKNOWABLE
+GET http://127.0.0.1:5801/hazelcast/rest/maps/finished-jobs/:state
+
+### 获取系统状态
+GET http://127.0.0.1:5801/hazelcast/rest/maps/system-monitoring-information
+
+### 提交某个任务
+
+# jobId   	optional	string	job id
+# jobName	optional	string	job name
+# isStartWithSavePoint	optional	string	if job is started with save point
+
+POST http://127.0.0.1:5801/hazelcast/rest/maps/submit-job?jobName=udp监听服务
+Content-Type: application/json
+
+{
+  "env": {
+    "parallelism": 1,
+    "job.mode": "BATCH"
+  },
+  "source": [
+    {
+      "plugin_name": "Udp",
+      "host": "0.0.0.0",
+      "port": 8888
+    }
+  ],
+  "transform": [
+  ],
+  "sink": [
+    {
+      "plugin_name": "Console"
+    }
+  ]
+}
+
+### 停止某个任务
+POST http://127.0.0.1:5801/hazelcast/rest/maps/stop-job
+Content-Type: application/json
+
+{
+  "jobId": 840582175232557057,
+  "isStopWithSavePoint": false
+}

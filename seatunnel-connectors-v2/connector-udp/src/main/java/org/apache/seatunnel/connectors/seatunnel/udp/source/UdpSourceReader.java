@@ -17,6 +17,8 @@
 
 package org.apache.seatunnel.connectors.seatunnel.udp.source;
 
+import cn.hutool.core.thread.ThreadUtil;
+import cn.hutool.core.util.StrUtil;
 import io.vertx.core.Vertx;
 import io.vertx.core.VertxOptions;
 import io.vertx.core.eventbus.EventBus;
@@ -32,12 +34,16 @@ import org.apache.seatunnel.connectors.seatunnel.udp.vertx.UdpModule;
 import org.apache.seatunnel.connectors.seatunnel.udp.vertx.UdpServerVerticle;
 
 import java.io.IOException;
+import java.util.concurrent.atomic.AtomicReference;
 
 @Slf4j
 public class UdpSourceReader extends AbstractSingleSplitReader<SeaTunnelRow> {
     private final UdpSourceParameter parameter;
     private final SingleSplitReaderContext context;
     private Vertx vertx;
+
+    private final Object LOCK = new Object();
+    private final AtomicReference<Exception> errRef = new AtomicReference<>();
 
     UdpSourceReader(UdpSourceParameter parameter, SingleSplitReaderContext context) {
         this.parameter = parameter;
@@ -47,16 +53,36 @@ public class UdpSourceReader extends AbstractSingleSplitReader<SeaTunnelRow> {
     @Override
     public void open() throws Exception {
         vertx = Vertx.vertx(new VertxOptions().setWorkerPoolSize(20));
-        log.info(
-                "start udp server, host:[{}], port:[{}], type:[{}] ",
+
+        String hostInfo = StrUtil.format("host:[{}], port:[{}], type:[{}]",
                 this.parameter.getHost(),
                 this.parameter.getPort(),
                 this.parameter.getType());
-        try {
-            vertx.deployVerticle(new UdpServerVerticle(this.parameter));
-        } catch (Exception e) {
-            log.error("failed to start udp server", e);
-            throw new UdpConnectorException(UdpConnectorErrorCode.UDP_SERVER_START_FAILED, e.getCause());
+
+        vertx.deployVerticle(new UdpServerVerticle(this.parameter))
+                .onComplete(res -> {
+                    if (res.succeeded()) {
+                        log.info("start deploy udp server successfully, {} ", hostInfo);
+                    } else {
+                        log.error("failed to deploy udp server");
+                        errRef.set(new UdpConnectorException(UdpConnectorErrorCode.UDP_SERVER_START_FAILED, res.cause()));
+                    }
+                    toNotifyAll();
+                });
+
+        log.info("prepare to start udp server, {} ", hostInfo);
+
+        // 强制异步转换为同步的方法
+        ThreadUtil.sync(LOCK);
+
+        if (errRef.get() != null) {
+            throw errRef.get();
+        }
+    }
+
+    private void toNotifyAll() {
+        synchronized (LOCK) {
+            LOCK.notifyAll();
         }
     }
 

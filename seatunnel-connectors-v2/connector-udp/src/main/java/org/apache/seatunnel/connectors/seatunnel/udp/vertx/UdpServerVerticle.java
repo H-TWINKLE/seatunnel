@@ -1,6 +1,8 @@
 package org.apache.seatunnel.connectors.seatunnel.udp.vertx;
 
 import io.vertx.core.AbstractVerticle;
+import io.vertx.core.Future;
+import io.vertx.core.Promise;
 import io.vertx.core.datagram.DatagramSocket;
 import io.vertx.core.datagram.DatagramSocketOptions;
 import io.vertx.core.eventbus.EventBus;
@@ -22,19 +24,27 @@ public class UdpServerVerticle extends AbstractVerticle {
     }
 
     @Override
-    public void start() throws Exception {
+    public void start(Promise<Void> startPromise) throws Exception {
         final DatagramSocket socket = this.vertx.createDatagramSocket(new DatagramSocketOptions());
-        socket.listen(parameter.getPort(), parameter.getHost(), asyncRes -> {
+        Future<DatagramSocket> socketFuture = socket.listen(parameter.getPort(), parameter.getHost());
+        socketFuture.onComplete(asyncRes -> {
             if (asyncRes.succeeded()) {
                 socket.handler(packet -> {
                     final byte[] bytes = packet.data().getBytes(0, packet.data().length());
                     final EventBus eventBus = this.vertx.eventBus();
                     sendContent(eventBus, bytes);
                 });
+                startPromise.complete();
             } else {
-                log.error("Can't get message", asyncRes.cause());
+                log.error("start udp verticle failed ", asyncRes.cause());
+                startPromise.fail(asyncRes.cause());
             }
         });
+    }
+
+    @Override
+    public void stop() throws Exception {
+        super.stop();
     }
 
     private void sendContent(EventBus eventBus, byte[] bytes) {
