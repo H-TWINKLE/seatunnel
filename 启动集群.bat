@@ -1,0 +1,1 @@
+./bin/seatunnel-cluster.cmd
